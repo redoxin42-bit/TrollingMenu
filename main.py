@@ -1,22 +1,20 @@
 import asyncio
 import random
-import os
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+from telethon.errors import FloodWaitError, SessionPasswordNeededError
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
+from motor.motor_asyncio import AsyncIOMotorClient
 
-# ТОКЕН ТВОЕГО БОТА (ОТЕЦ)
+# --- НАСТРОЙКИ (УЖЕ ЗАПОЛНЕНО) ---
 API_TOKEN = '8644779172:AAFJJCPaD-btolCWwcSMkf-iCunFhFDMq14'
+MONGO_URL = "mongodb+srv://Redoxin42_db_user:Redox@cluster0.rsebeqg.mongodb.net/?appName=Cluster0"
 
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
-
-# ПОЛНЫЙ СПИСОК ФРАЗ
+# --- ТВОИ ФРАЗЫ ---
 phrases = [
     "ты пидор ебаный нахуй", "я те мать еба шлн вахуй", "я отвожюб маоть пер нахуй",
     "ты пидро кебавнный нищий", "я тво.юмать ебалн ахуй", "ты гей ебанынй чмо нахзуй",
@@ -39,7 +37,7 @@ phrases = [
     "ты нищйий харек блясдкеий", "помоыйн сын бялид", "сын шьбюзи зареванный",
     "изрезанный пидорас н ахуй", "истрезанная шавлаа нахуй", "те мать ебаолн ахуй",
     "ты дипор ебанынй уптой", "я твою мать ебалн ахуй", "ты егй ебанынй деревенский",
-    "ебьаны6нйу прйон ахуй ог8ородник", "бяолскдий нахуй нищак", "беавнынй уптоурп йнхауй гей",
+    "ебьаны6нйу прйон ахуй ог8ородник", "бяолскдий нахуй нищак", "беавнынй уптоурп йнхауй gey",
     "я тво ю апмть ебал нахуй забапвный уролд", "печашльн ый пдиор нпахзууй не з-лись",
     "я ет мать ебалн хуй парпуц раз", "ты егекй ебанный кптой нхауй", "избитый куоклд",
     "я твою маить уебал нахуй", "куоклд ебаыннй уптйо неахйу соси", "ты пдиор ебаын птуцопй нхауй т егей",
@@ -58,8 +56,8 @@ phrases = [
     "ты гей нахъуй ебаныйн уптйо", "твоя мать шлюха уттч елнвы сосет нахуй", "ты че утпйо бялсдкий помойный бомд",
     "бичукган ебанный уптйо природный", "ты геяка нхайу твоя мать сосала член", "ты пидрон ахуй ебаный у птйо измученый",
     "ты шалваьнахуй еьбананя тварь", "я твою мать ебалн ахйу", "завалавьи ебюанг6нлон еахуй ты мкерзавец ебаны6нй",
-    "тоупй нахй не ной", "ты шлах ебананя цыганка", "я  твою матьебашил нахуй", "ты пмионля меня гнахйу тьы олеьн ебанынй",
-    "ты утпрой гнилой нахйу хач", "ты епидргоас изьеабывйнн", "ты пдиор нхауй прирожденный",
+    "тоупй нахй не ной", "ты шлах ебананя цыганка", "я твою матьебашил нахуй", "ты пмионля меня гнахйу тьы олеьн ебанынй",
+    "ты утпрой гнилой нахуй хач", "ты епидргоас изьеабывйнн", "ты пдиор нхауй прирожденный",
     "енбали твою матль нахуй ты пидор", "закрой ебалот говноедн ахуй", "ты калловый сын шлюхзи нахуй а ну втапи ебало",
     "обама нгебюанынцй авзали ебалон казуй", "я тек ат ьтуту пмер сперма нахуй емоя", "ты сперма моя тупой ты дикарь",
     "твяома тть нахуй состе члены тут", "ты че защеканец ебснны упйон аухй", "ты избитый ппидорас",
@@ -70,8 +68,8 @@ phrases = [
     "че ты оьбезяьан ебспнаня нахцуй", "ты че гроищшь нахуй сывнок шлюхи", "потлетарный пидорас я те мать убюь. юнахуй",
     "школьниек кебанныяй я твою мать тут потрахал", "ты не обизжайся нахуй гей ебанный", "я те мать убил сегодня",
     "тыч ен нваыхзкйу путана ебаннкая", "геяка сука засранная", "анука нхсвуй пдии отсюада",
-    "я те мат ье ьбалн ахуй тут ты пидро", "повстане цбеанный нхауй ро такзрйо", "ты пидор ебанынй сранный",
-    "ты че нахуй ппедик енбанный", "тупой нвайхц ыт сраныйн говнбюк", "я твою маить пер назхйу тут",
+    "я те мат ье ьбалн ахуй тут ты пидро", "повстане цбеанный нхауй ро такзрйо", "ты пидор ебанынй sranный",
+    "ты че нахуй ппедик енбанный", "тупой навйхц ыт сраныйн говнбюк", "я твою маить пер назхйу тут",
     "ты сын шлюхи победимыф", "ты слабы нхауй ишук", "я тебя убь юнахуй", "тупой счынок шлюхи а ну ебало закрйор",
     "ты чето сыноко бляди ебанный", "ты утпой гей нахуй", "ты сранный нищак", "обнищалый придро пиздец",
     "я те мать ебалн ахуй", "ты тупой пдигор", "ебанный ты скот", "я те мать еблн хуй ты скотина",
@@ -95,7 +93,7 @@ phrases = [
     "тебя убью нахуй", "ты пиджолр ебанын на рромансе", "я тебя зарежу нахуй тут", "я тебюя убьюн апхуй ты утпой ебанный",
     "тя ядоувитый сынок бюляди", "я тебе мат ьебалн ахуй слабак", "ебанынй уптйон ахъуй ты че попутал",
     "я те мать убюью нахуй ты слабы пидор", "сынок шлбжэихи ебанный", "пидор патифон ебангынйц уптйо нахуй",
-    "я тек мать ебал сукин сын бялсдкий", "помойнывй ты пидор нахуй", "тьы ебавнная слдабачка", "ты гондон ебанный    прокаженный", "я те щас ебало нахуй разнесу", "ты пидор конченый безмозглый",
+    "я тек мать ебал сукин сын бялсдкий", "помойнывй ты пидор нахуй", "тьы ебавнная слдабачка", "ты гондон ебанный прокаженный", "я те щас ебало нахуй разнесу", "ты пидор конченый безмозглый",
     "твою мать в рот ебал нахуй", "ты урод ебанный выродок", "я те рожу нахуй исковеркаю",
     "ты мразь ебаная ползучая", "твоя мать шалава продажная", "ты говноед ебанный вонючий",
     "я те глотку нахуй перегрызу", "ты отброс ебаный общества", "твою мать по асфальту волоком",
@@ -142,7 +140,7 @@ phrases = [
     "ты энцефалит ебанный клещевой", "я те синапсы нахуй разрушу", "ты полиомиелит ебаный спинальный",
     "твоя мать шмара залатанная", "ты дифтерия ебанная дыхательная", "я те миелин нахуй растворю",
     "ты коклюш ебаный судорожный", "твою мать в кипящей смоле", "ты корь ебанная детская",
-    "я те глиальные клетки нахуй уничтожу", "ты краснуха ебаная врожденная", "твоя мать проститутка потрепанная",     "ты грипп ебаный свиной", "твоя мать проститутка занюханная", "ты орви ебанное острое",
+    "я те глиальные клетки нахуй уничтожу", "ты краснуха ебаная врожденная", "твоя мать проститутка потрепанная", "ты грипп ебаный свиной", "твоя мать проститутка занюханная", "ты орви ебанное острое",
     "я те лизосомы нахуй вскрою", "ты пневмония ебаная крупозная", "твою мать в кипящей крови",
     "ты бронхит ебанный обструктивный", "я те аппарат гольджи нахуй сломаю", "ты астма ебаная бронхиальная",
     "твоя мать шмара потрепанная", "ты туберкулез ебанный легочный", "я те эндоплазматическую сеть нахуй порву",
@@ -203,109 +201,147 @@ phrases = [
     "тв чк там сын хуйни", "твою мать потаскуху ебаь", " ты че жирныц сын хуйни соси мне там"
 ]
 
-class Form(StatesGroup):
+# --- ИНИЦИАЛИЗАЦИЯ ---
+m_client = AsyncIOMotorClient(MONGO_URL)
+db = m_client["tg_spammer"]
+sessions_col = db["sessions"]
+
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
+
+class States(StatesGroup):
     api_id = State()
     api_hash = State()
     phone = State()
     code = State()
     password = State()
     main_menu = State()
-    chat_tag = State()
-    chatter = State()
-    lsser = State()
+    spaming = State()
 
-# Хранилище клиентов для разных юзеров
 user_clients = {}
-user_tasks = {}
+active_tasks = {}
 
-def get_main_keyboard():
+def get_kb():
     buttons = [
-        [KeyboardButton(text="Чат+username"), KeyboardButton(text="Chatter")],
-        [KeyboardButton(text="Lsser"), KeyboardButton(text="Остановить все")]
+        [types.KeyboardButton(text="Запустить спам")],
+        [types.KeyboardButton(text="Остановить все")]
     ]
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+    return types.ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 @dp.message(Command("start"))
-async def start_cmd(message: types.Message, state: FSMContext):
-    await message.answer("Добро пожаловать! Чтобы запустить сессию, введите ваш API ID (можно взять на my.telegram.org):")
-    await state.set_state(Form.api_id)
+async def cmd_start(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
+    saved = await sessions_col.find_one({"_id": uid})
+    if saved:
+        await message.answer("✅ Подключаюсь к облачной сессии...")
+        try:
+            client = TelegramClient(StringSession(saved['session']), saved['api_id'], saved['api_hash'])
+            await client.connect()
+            user_clients[uid] = client
+            await message.answer("Готово! Что делаем?", reply_markup=get_kb())
+            await state.set_state(States.main_menu)
+        except Exception as e:
+            await message.answer(f"Ошибка: {e}. Начнем заново. API ID:")
+            await state.set_state(States.api_id)
+    else:
+        await message.answer("Введи API ID:")
+        await state.set_state(States.api_id)
 
-@dp.message(Form.api_id)
-async def process_api_id(message: types.Message, state: FSMContext):
+@dp.message(States.api_id)
+async def get_id(message: types.Message, state: FSMContext):
     await state.update_data(api_id=message.text.strip())
-    await message.answer("Теперь введите ваш API HASH:")
-    await state.set_state(Form.api_hash)
+    await message.answer("Введи API HASH:")
+    await state.set_state(States.api_hash)
 
-@dp.message(Form.api_hash)
-async def process_api_hash(message: types.Message, state: FSMContext):
+@dp.message(States.api_hash)
+async def get_hash(message: types.Message, state: FSMContext):
     await state.update_data(api_hash=message.text.strip())
-    await message.answer("Введите ваш номер телефона (с +7...):")
-    await state.set_state(Form.phone)
+    await message.answer("Введи номер (+7...):")
+    await state.set_state(States.phone)
 
-@dp.message(Form.phone)
-async def process_phone(message: types.Message, state: FSMContext):
+@dp.message(States.phone)
+async def get_phone(message: types.Message, state: FSMContext):
     data = await state.get_data()
     phone = message.text.strip()
-    await state.update_data(phone=phone)
-    
-    uid = message.from_user.id
-    user_clients[uid] = TelegramClient(f"session_{uid}", int(data['api_id']), data['api_hash'])
-    await user_clients[uid].connect()
-    
+    client = TelegramClient(StringSession(), int(data['api_id']), data['api_hash'])
+    await client.connect()
     try:
-        sent_code = await user_clients[uid].send_code_request(phone)
-        await state.update_data(phone_code_hash=sent_code.phone_code_hash)
-        await message.answer("Введите код разделенный (например: 0 0 0 0 0):")
-        await state.set_state(Form.code)
+        res = await client.send_code_request(phone)
+        user_clients[message.from_user.id] = client
+        await state.update_data(phone=phone, hash=res.phone_code_hash)
+        await message.answer("Код из ТГ:")
+        await state.set_state(States.code)
     except Exception as e:
-        await message.answer(f"Ошибка при отправке кода: {e}")
+        await message.answer(f"Ошибка: {e}")
 
-@dp.message(Form.code)
-async def process_code(message: types.Message, state: FSMContext):
+@dp.message(States.code)
+async def get_code(message: types.Message, state: FSMContext):
     data = await state.get_data()
     uid = message.from_user.id
     code = message.text.replace(" ", "")
+    client = user_clients[uid]
     try:
-        await user_clients[uid].sign_in(data['phone'], code, phone_code_hash=data['phone_code_hash'])
-        await message.answer("Бот успешно на аккаунте!", reply_markup=get_main_keyboard())
-        await state.set_state(Form.main_menu)
+        await client.sign_in(data['phone'], code, phone_code_hash=data['hash'])
+        session_str = client.session.save()
+        await sessions_col.update_one(
+            {"_id": uid},
+            {"$set": {"session": session_str, "api_id": int(data['api_id']), "api_hash": data['api_hash']}},
+            upsert=True
+        )
+        await message.answer("✅ Аккаунт привязан!", reply_markup=get_kb())
+        await state.set_state(States.main_menu)
     except SessionPasswordNeededError:
-        await message.answer("Введите пароль двухэтапной аутентификации:")
-        await state.set_state(Form.password)
+        await message.answer("Введи пароль 2FA:")
+        await state.set_state(States.password)
+
+@dp.message(States.password)
+async def get_password(message: types.Message, state: FSMContext):
+    uid = message.from_user.id
+    client = user_clients[uid]
+    data = await state.get_data()
+    try:
+        await client.sign_in(password=message.text.strip())
+        session_str = client.session.save()
+        await sessions_col.update_one(
+            {"_id": uid},
+            {"$set": {"session": session_str, "api_id": int(data['api_id']), "api_hash": data['api_hash']}},
+            upsert=True
+        )
+        await message.answer("✅ Готово!", reply_markup=get_kb())
+        await state.set_state(States.main_menu)
     except Exception as e:
-        await message.answer(f"Ошибка входа: {e}")
+        await message.answer(f"Ошибка: {e}")
+
+@dp.message(F.text == "Запустить спам", States.main_menu)
+async def ask_target(message: types.Message, state: FSMContext):
+    await message.answer("Кому спамим? (Username):")
+    await state.set_state(States.spaming)
+
+@dp.message(States.spaming)
+async def start_spam(message: types.Message, state: FSMContext):
+    target = message.text.strip()
+    uid = message.from_user.id
+    active_tasks[uid] = True
+    asyncio.create_task(do_spam(uid, target))
+    await message.answer(f"🚀 Погнали в {target}!", reply_markup=get_kb())
+    await state.set_state(States.main_menu)
 
 @dp.message(F.text == "Остановить все")
-async def stop_all(message: types.Message):
-    user_tasks[message.from_user.id] = False
-    await message.answer("Все процессы остановлены.")
+async def stop_spam(message: types.Message):
+    active_tasks[message.from_user.id] = False
+    await message.answer("🛑 Стоп.")
 
-# --- ЛОГИКА КОМАНД ---
-@dp.message(F.text == "Chatter", Form.main_menu)
-async def cmd_chatter(message: types.Message, state: FSMContext):
-    await message.answer("Введите ID чата:")
-    await state.set_state(Form.chatter)
-
-@dp.message(Form.chatter)
-async def run_chatter(message: types.Message, state: FSMContext):
-    chat_id = message.text.strip()
-    user_tasks[message.from_user.id] = True
-    asyncio.create_task(spam_logic(message.from_user.id, chat_id))
-    await message.answer(f"Запущен Chatter в {chat_id}")
-    await state.set_state(Form.main_menu)
-
-# (Аналогично добавь обработку Lsser и Чат+username как в предыдущем коде)
-
-async def spam_logic(uid, target, prefix=""):
-    while user_tasks.get(uid):
+async def do_spam(uid, target):
+    client = user_clients[uid]
+    while active_tasks.get(uid):
         try:
-            phrase = random.choice(phrases)
-            await user_clients[uid].send_message(target, f"{prefix} {phrase}".strip())
-            await asyncio.sleep(0.5)
-        except: break
-
-async def main():
-    await dp.start_polling(bot)
+            msg = random.choice(phrases)
+            await client.send_message(target, msg)
+            await asyncio.sleep(0.7)
+        except FloodWaitError as e:
+            await asyncio.sleep(e.seconds)
+        except Exception:
+            break
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(dp.start_polling(bot))
