@@ -14,7 +14,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 # --- НАСТРОЙКИ ---
 API_TOKEN = '8644779172:AAFJJCPaD-btolCWwcSMkf-iCunFhFDMq14'
-MONGO_URL = "mongodb+srv://Redoxin42_db_user:Redox@cluster0.rsebeqg.mongodb.net/?appName=Cluster0"
+MONGO_URL = "mongodb+srv://redoxin42_db_user:Redox@cluster0.rsebeqg.mongodb.net/?appName=Cluster0"
 
 # --- ТВОИ ФРАЗЫ ---
 phrases = [
