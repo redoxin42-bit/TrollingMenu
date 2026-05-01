@@ -2,3 +2,4 @@ aiogram
 telethon
 motor
 dnspython
+aiohttp
