@@ -1,6 +1,7 @@
 import asyncio
 import random
 import os
+import logging
 from aiohttp import web
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -12,11 +13,15 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# --- НАСТРОЙКИ ---
-API_TOKEN = '8644779172:AAFJJCPaD-btolCWwcSMkf-iCunFhFDMq14'
+# Логирование для Render
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- ДАННЫЕ (УЖЕ ЗАПОЛНЕНО) ---
+API_TOKEN = '8792541323:AAFMYvVpr2_8Zz43qBDcx4kCCUj9tFSKqM4'
 MONGO_URL = "mongodb+srv://redoxin42_db_user:Redox@cluster0.rsebeqg.mongodb.net/?appName=Cluster0"
 
-# --- ТВОИ ФРАЗЫ ---
+# --- ТВОИ ФРАЗЫ (ПОЛНЫЙ СПИСОК) ---
 phrases = [
     "ты пидор ебаный нахуй", "я те мать еба шлн вахуй", "я отвожюб маоть пер нахуй",
     "ты пидро кебавнный нищий", "я тво.юмать ебалн ахуй", "ты гей ебанынй чмо нахзуй",
@@ -86,7 +91,7 @@ phrases = [
     "я те матье ебалн хуй", "ты скот бялскдий", "ебанный старый пидро", "я те мать убью нахуй",
     "дохлый ты пидор нахуй", "паолумертвый пидорас", "ты че нахуй ебанный трупной ты пидро",
     "я те мкать буьбюю напхуй", "ты тупой пидор", "ьвоя мать неахуй дуар ебананя", "я твою мать убью напхуй",
-    "ты сукот еюанный срианный", "ты че нахуй ноешь", "ты че такой гей ебанный", "ты че сранный пидор нахуй ебанныцй",
+    "ты сукот еюанный срианный", "ты че нахуй ноешь", "ты че такой гей ебанный", "ты че sranный пидор нахуй ебанныцй",
     "я непобедим", "тьы член сосшеь нахуй", "закрйо ебало щас свое", "ты слабый нахуй тупой ебанный ишак",
     "завиле белаон ахуй свое", " ятвою матьн ахуй просто на члене ебал", "твоя мать клитором языки все принимает и чолены",
     "твоя маитьн хуй скотина потраханная", "ты и изасиллованный ебанный петушок", "ты тутп нахуй ебалот втопи",
@@ -203,7 +208,7 @@ phrases = [
     "тв чк там сын хуйни", "твою мать потаскуху ебаь", " ты че жирныц сын хуйни соси мне там"
 ]
 
-# --- ИНИЦИАЛИЗАЦИЯ ---
+# --- ЛОГИКА ---
 m_client = AsyncIOMotorClient(MONGO_URL)
 db = m_client["tg_spammer"]
 sessions_col = db["sessions"]
@@ -212,20 +217,12 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 class States(StatesGroup):
-    api_id = State()
-    api_hash = State()
-    phone = State()
-    code = State()
-    password = State()
-    main_menu = State()
-    spaming = State()
+    api_id = State(); api_hash = State(); phone = State()
+    code = State(); password = State(); main_menu = State(); spaming = State()
 
-user_clients = {}
-active_tasks = {}
+user_clients, active_tasks = {}, {}
 
-# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
-async def handle(request):
-    return web.Response(text="Bot is running!")
+async def handle(request): return web.Response(text="OK")
 
 async def start_web_server():
     app = web.Application()
@@ -235,7 +232,6 @@ async def start_web_server():
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
     await site.start()
 
-# --- ЛОГИКА БОТА (AIOGRAM) ---
 def get_kb():
     buttons = [[types.KeyboardButton(text="Запустить спам")], [types.KeyboardButton(text="Остановить все")]]
     return types.ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -251,80 +247,63 @@ async def cmd_start(message: types.Message, state: FSMContext):
             user_clients[uid] = client
             await message.answer("✅ Сессия восстановлена!", reply_markup=get_kb())
             await state.set_state(States.main_menu)
-        except:
-            await message.answer("Введи API ID:")
-            await state.set_state(States.api_id)
-    else:
-        await message.answer("Введи API ID:")
-        await state.set_state(States.api_id)
+        except: await state.set_state(States.api_id); await message.answer("Введи API ID:")
+    else: await state.set_state(States.api_id); await message.answer("Введи API ID:")
 
 @dp.message(States.api_id)
 async def get_id(message: types.Message, state: FSMContext):
     await state.update_data(api_id=message.text.strip())
-    await message.answer("Введи API HASH:")
-    await state.set_state(States.api_hash)
+    await message.answer("Введи API HASH:"); await state.set_state(States.api_hash)
 
 @dp.message(States.api_hash)
 async def get_hash(message: types.Message, state: FSMContext):
     await state.update_data(api_hash=message.text.strip())
-    await message.answer("Введи номер (+7...):")
-    await state.set_state(States.phone)
+    await message.answer("Введи номер (+7...):"); await state.set_state(States.phone)
 
 @dp.message(States.phone)
 async def get_phone(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    phone = message.text.strip()
+    data = await state.get_data(); phone = message.text.strip()
     client = TelegramClient(StringSession(), int(data['api_id']), data['api_hash'])
     await client.connect()
     try:
         res = await client.send_code_request(phone)
         user_clients[message.from_user.id] = client
         await state.update_data(phone=phone, hash=res.phone_code_hash)
-        await message.answer("Код из ТГ:")
-        await state.set_state(States.code)
+        await message.answer("Код из ТГ:"); await state.set_state(States.code)
     except Exception as e: await message.answer(f"Ошибка: {e}")
 
 @dp.message(States.code)
 async def get_code(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    uid = message.from_user.id
-    code = message.text.replace(" ", "")
+    data, uid = await state.get_data(), message.from_user.id
     client = user_clients[uid]
     try:
-        await client.sign_in(data['phone'], code, phone_code_hash=data['hash'])
-        session_str = client.session.save()
-        await sessions_col.update_one({"_id": uid}, {"$set": {"session": session_str, "api_id": int(data['api_id']), "api_hash": data['api_hash']}}, upsert=True)
-        await message.answer("✅ Готово!", reply_markup=get_kb())
-        await state.set_state(States.main_menu)
-    except SessionPasswordNeededError:
-        await message.answer("2FA Пароль:")
-        await state.set_state(States.password)
+        await client.sign_in(data['phone'], message.text.replace(" ", ""), phone_code_hash=data['hash'])
+        await sessions_col.update_one({"_id": uid}, {"$set": {"session": client.session.save(), "api_id": int(data['api_id']), "api_hash": data['api_hash']}}, upsert=True)
+        await message.answer("✅ Готово!", reply_markup=get_kb()); await state.set_state(States.main_menu)
+    except SessionPasswordNeededError: await message.answer("2FA Пароль:"); await state.set_state(States.password)
+    except Exception as e: await message.answer(f"Ошибка: {e}")
 
 @dp.message(States.password)
 async def get_pass(message: types.Message, state: FSMContext):
     uid, client, data = message.from_user.id, user_clients[message.from_user.id], await state.get_data()
     await client.sign_in(password=message.text.strip())
     await sessions_col.update_one({"_id": uid}, {"$set": {"session": client.session.save(), "api_id": int(data['api_id']), "api_hash": data['api_hash']}}, upsert=True)
-    await message.answer("✅ Вход выполнен!", reply_markup=get_kb())
-    await state.set_state(States.main_menu)
+    await message.answer("✅ Вход выполнен!", reply_markup=get_kb()); await state.set_state(States.main_menu)
 
 @dp.message(F.text == "Запустить спам", States.main_menu)
 async def ask_target(message: types.Message, state: FSMContext):
-    await message.answer("Username жертвы:")
-    await state.set_state(States.spaming)
+    await message.answer("Username жертвы:"); await state.set_state(States.spaming)
 
 @dp.message(States.spaming)
 async def start_spam(message: types.Message, state: FSMContext):
     target, uid = message.text.strip(), message.from_user.id
     active_tasks[uid] = True
     asyncio.create_task(do_spam(uid, target))
-    await message.answer(f"🚀 Начали!")
-    await state.set_state(States.main_menu)
+    await message.answer(f"🚀 Начали!"); await state.set_state(States.main_menu)
 
 @dp.message(F.text == "Остановить все")
 async def stop_spam(message: types.Message):
-    active_tasks[message.from_user.id] = False
-    await message.answer("🛑 Стоп.")
+    active_tasks[message.from_user.id] = False; await message.answer("🛑 Стоп.")
 
 async def do_spam(uid, target):
     client = user_clients[uid]
@@ -336,7 +315,8 @@ async def do_spam(uid, target):
         except: break
 
 async def main():
-    await start_web_server()  # Запускаем "пустой" сайт, чтобы Render не ругался
+    await start_web_server()
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
