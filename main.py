@@ -13,15 +13,14 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# Логирование для Render
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- ДАННЫЕ (УЖЕ ЗАПОЛНЕНО) ---
-API_TOKEN = '8792541323:AAFMYvVpr2_8Zz43qBDcx4kCCUj9tFSKqM4'
-MONGO_URL = "mongodb+srv://redoxin42_db_user:Redox@cluster0.rsebeqg.mongodb.net/?appName=Cluster0"
+# --- КОНФИГУРАЦИЯ ---
+API_TOKEN = '8792541323:AAFVB_Q8O_THCehymVxiVpSqNcrzBFdcdcI'
+MONGO_URL = "mongodb+srv://admin:password12345@cluster0.rsebeqg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
-# --- ТВОИ ФРАЗЫ (ПОЛНЫЙ СПИСОК) ---
 phrases = [
     "ты пидор ебаный нахуй", "я те мать еба шлн вахуй", "я отвожюб маоть пер нахуй",
     "ты пидро кебавнный нищий", "я тво.юмать ебалн ахуй", "ты гей ебанынй чмо нахзуй",
@@ -100,7 +99,8 @@ phrases = [
     "тебя убью нахуй", "ты пиджолр ебанын на рромансе", "я тебя зарежу нахуй тут", "я тебюя убьюн апхуй ты утпой ебанный",
     "тя ядоувитый сынок бюляди", "я тебе мат ьебалн ахуй слабак", "ебанынй уптйон ахъуй ты че попутал",
     "я те мать убюью нахуй ты слабы пидор", "сынок шлбжэихи ебанный", "пидор патифон ебангынйц уптйо нахуй",
-    "я тек мать ебал сукин сын бялсдкий", "помойнывй ты пидор нахуй", "тьы ебавнная слдабачка", "ты гондон ебанный прокаженный", "я те щас ебало нахуй разнесу", "ты пидор конченый безмозглый",
+    "я тек мать ебал сукин сын бялсдкий", "помойнывй ты пидор нахуй", "тьы ебавнная слдабачка", 
+    "ты гондон ебанный прокаженный", "я те щас ебало нахуй разнесу", "ты пидор конченый безмозглый",
     "твою мать в рот ебал нахуй", "ты урод ебанный выродок", "я те рожу нахуй исковеркаю",
     "ты мразь ебаная ползучая", "твоя мать шалава продажная", "ты говноед ебанный вонючий",
     "я те глотку нахуй перегрызу", "ты отброс ебаный общества", "твою мать по асфальту волоком",
@@ -147,7 +147,8 @@ phrases = [
     "ты энцефалит ебанный клещевой", "я те синапсы нахуй разрушу", "ты полиомиелит ебаный спинальный",
     "твоя мать шмара залатанная", "ты дифтерия ебанная дыхательная", "я те миелин нахуй растворю",
     "ты коклюш ебаный судорожный", "твою мать в кипящей смоле", "ты корь ебанная детская",
-    "я те глиальные клетки нахуй уничтожу", "ты краснуха ебаная врожденная", "твоя мать проститутка потрепанная", "ты грипп ебаный свиной", "твоя мать проститутка занюханная", "ты орви ебанное острое",
+    "я те глиальные клетки нахуй уничтожу", "ты краснуха ебаная врожденная", "твоя мать проститутка потрепанная", 
+    "ты грипп ебаный свиной", "твоя мать проститутка занюханная", "ты орви ебанное острое",
     "я те лизосомы нахуй вскрою", "ты пневмония ебаная крупозная", "твою мать в кипящей крови",
     "ты бронхит ебанный обструктивный", "я те аппарат гольджи нахуй сломаю", "ты астма ебаная бронхиальная",
     "твоя мать шмара потрепанная", "ты туберкулез ебанный легочный", "я те эндоплазматическую сеть нахуй порву",
@@ -217,8 +218,7 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 class States(StatesGroup):
-    api_id = State(); api_hash = State(); phone = State()
-    code = State(); password = State(); main_menu = State(); spaming = State()
+    api_id, api_hash, phone, code, password, main_menu, spaming = State(), State(), State(), State(), State(), State(), State()
 
 user_clients, active_tasks = {}, {}
 
@@ -229,8 +229,10 @@ async def start_web_server():
     app.router.add_get("/", handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    logger.info(f"Web server on port {port}")
 
 def get_kb():
     buttons = [[types.KeyboardButton(text="Запустить спам")], [types.KeyboardButton(text="Остановить все")]]
@@ -269,7 +271,7 @@ async def get_phone(message: types.Message, state: FSMContext):
         res = await client.send_code_request(phone)
         user_clients[message.from_user.id] = client
         await state.update_data(phone=phone, hash=res.phone_code_hash)
-        await message.answer("Код из ТГ:"); await state.set_state(States.code)
+        await message.answer("Код подтверждения:"); await state.set_state(States.code)
     except Exception as e: await message.answer(f"Ошибка: {e}")
 
 @dp.message(States.code)
@@ -292,7 +294,7 @@ async def get_pass(message: types.Message, state: FSMContext):
 
 @dp.message(F.text == "Запустить спам", States.main_menu)
 async def ask_target(message: types.Message, state: FSMContext):
-    await message.answer("Username жертвы:"); await state.set_state(States.spaming)
+    await message.answer("Username жертвы (без @):"); await state.set_state(States.spaming)
 
 @dp.message(States.spaming)
 async def start_spam(message: types.Message, state: FSMContext):
@@ -303,7 +305,7 @@ async def start_spam(message: types.Message, state: FSMContext):
 
 @dp.message(F.text == "Остановить все")
 async def stop_spam(message: types.Message):
-    active_tasks[message.from_user.id] = False; await message.answer("🛑 Стоп.")
+    active_tasks[message.from_user.id] = False; await message.answer("🛑 Остановлено.")
 
 async def do_spam(uid, target):
     client = user_clients[uid]
